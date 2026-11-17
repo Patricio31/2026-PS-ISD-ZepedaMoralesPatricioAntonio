@@ -5,6 +5,12 @@ const express = require('express');
 const session = require('express-session');
 const MySQLStore = require('express-mysql-session')(session);
 const { crearModeloUsuarios } = require('./modelos/usuarios.modelo');
+const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
+const {crearModeloUsuarios} = require('./modelos/usuarios.modelo');
+const { config } = require('dotenv');
+const {crearModeloTokens} = requite('./modelos/tokens.modelo');
+
 
 const NOMBRE_COOKIE = 'connect.sid';
 
@@ -193,6 +199,50 @@ function crearApp(config, pool){
   });
 
   return app;
+}
+
+
+//vamos a continuar con el jwt
+const SECRETO_JWT = config.jwtSecreto || process.env.JWT_SECRET || 'secreto-jwt-solo-para-la-demo';
+
+//vamos a crear el token de un usuario, con datos, (payload) + vencimiento + id unico y va a estar firmado con HS256 
+function firmarToken(usuario){
+  return jwt.sign(
+    {sub: String(usuario.id), usuario : usuario.usuario, nombre: usuario.nombre, rol: usuario.rol}, SECRETO_JWT, {algorithm: 'HS256', expiresIn: config.jwtExpiraSeg, jwtid: crypto.randomUUID()}
+  )
+
+  //para poder atender la petición con el middleware
+  async function requiereJWT(req, res, next) {
+    const encabezado = req.header.authorization || '';
+    if(!encabezado.startsWith('Bearer ')){
+      return res.status(401).json({error: '401. Falta el token para estar Autorizado'});
+    }
+    const token = encabezado.slice('Bearer'.length);
+
+    let datos;
+    try{
+      //debemos aceptar los datos de acuerdo al algoritmo
+      datos = jwt.verify(token, SECRETO_JWT, {algorithms: ['HS256']});
+    }catch(error){
+      if(error.name === 'TokenExpiredError'){
+        return res.status(401).json({error: '401 Token expirado por favor renuevalo o vuelve iniciar'});
+      } 
+      return res.status(401).json({error: '401 Token invalido'})
+    }
+    try{
+      if(config.jwtRevocar && (await crearModeloTokens.estaRevocado(datos.jti)){
+        return res.status(401).json({error: '401. Token revocado ya se cerro la sesión'})
+      }
+    }catch(error){
+      return next(error);
+    }
+
+    req.jwt = datos;
+    next();
+    
+  }
+
+  
 }
 
 module.exports = {crearApp, NOMBRE_COOKIE};
