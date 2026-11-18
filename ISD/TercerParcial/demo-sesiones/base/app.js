@@ -230,7 +230,7 @@ function firmarToken(usuario){
       return res.status(401).json({error: '401 Token invalido'})
     }
     try{
-      if(config.jwtRevocar && (await crearModeloTokens.estaRevocado(datos.jti)){
+      if(config.jwtRevocar && (await crearModeloTokens.estaRevocado(datos.jti))){
         return res.status(401).json({error: '401. Token revocado ya se cerro la sesión'})
       }
     }catch(error){
@@ -242,7 +242,65 @@ function firmarToken(usuario){
     
   }
 
-  
+  //funcion para verificar si el rol es valido con su token
+  function requiereRolJWT(rol){
+    return (req, res, next) => {
+      if(req.jwt.rol !== rol){
+        return res.status(403).json({error: `403 Eres ${req.jwt.usuario}, pero esta ruta no tienes el permiso para navegar de acuerdo a tu ${rol}`});
+      }
+      next();
+    };
+  }
+
+  //manejo de rutas con jwt
+
+  app.post('/api/jwt/login', async(req, res, next) =>{
+    try{
+      const {usuario, contrasena} = req.body || {};
+      const datos = await usuarios.verificar(usuario, contrasena);
+      if(!datos) return res.status(401).json({error: 'Usuario o contraseña incorrectos'});
+      res.json({token: firmarToken(datos), usuario: datos});
+
+    }catch(error){
+      next(error);
+    }
+  });
+
+  app.get('/api/jwt/perfil', requiereJWT, (req, res)=>{
+    res.json({
+      mensaje: `Hola ${req.jwt.nombre}`,
+      rol : req.jwt.rol, 
+      expiraEnSegundos : Math.max(0, req.jwt.exp - Math.floor(Date.now() / 1000))
+    });
+  });
+
+  //ejemplo de revocación de de un token todavia valido
+  app.post('/api/jwt/refresh', requiereJWT, (req, res) => {
+    const {sub, usuario, nombre, rol} = req.jwt;
+    res.json({token: firmarToken({id : sub, usuario, nombre, rol})});
+  })
+
+  app.get('/api/jwt/reporte', requiereJWT, requiereRolJWT('admin'), (req, res)=>{
+    res.json({reporte: 'Talleres: 3'});
+  });
+
+  //que le pasa al token cuando logout
+  app.post('/api/jwt/logout', requiereJWT, async (req, res, next)=>{
+    try{
+      if(config.jwtRevocar){
+        await tokens.revocar(req.jwt.jti, req.jwt.usuario, req.jwt.exp);
+        res.json({mensaje: 'Token revocado en el servidor, se anota en la lista negra', revocado:true}); 
+      }
+      res.json({mensaje : 'El servidor no guarda nada, solo se puede borrar el token desde el navegador', revocado: false});
+    }catch(error){
+      next(error);
+    }
+  })
+
+
+
+
+
 }
 
 module.exports = {crearApp, NOMBRE_COOKIE};
