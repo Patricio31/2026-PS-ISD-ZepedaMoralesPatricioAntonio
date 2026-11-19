@@ -26,5 +26,5 @@ module.exports = {
   jwtExpiraSeg : 5*60,
 
   //true: al cerrar sesion el servidor anota el token en la lista negra y ya no lo acepta. false: el servidor no guarda nada, el token sigue sirviendo
-  jwtRevocar: true;
+  jwtRevocar: true,
 };

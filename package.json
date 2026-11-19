@@ -7,14 +7,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/demonassit/2026-PS-ISD-AppatApmatNombre.git"
+    "url": "git+https://github.com/Patricio31/2026-PS-ISD-ZepedaMoralesPatricioAntonio.git"
   },
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/demonassit/2026-PS-ISD-AppatApmatNombre/issues"
+    "url": "https://github.com/Patricio31/2026-PS-ISD-ZepedaMoralesPatricioAntonio/issues"
   },
-  "homepage": "https://github.com/demonassit/2026-PS-ISD-AppatApmatNombre#readme",
+  "homepage": "https://github.com/Patricio31/2026-PS-ISD-ZepedaMoralesPatricioAntonio#readme",
   "description": "",
   "dependencies": {
     "net": "^1.0.2"
