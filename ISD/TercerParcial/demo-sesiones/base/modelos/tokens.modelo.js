@@ -1,28 +1,29 @@
-// en este archivo vamos a tener la lista negra de la tabla de los tokens revocados.
+// En este archivo está la lista negra: la tabla tokens_revocados.
+function crearModeloTokens(pool) {
+  // Anota un token como revocado (por su jti). exp viene en segundos desde 1970.
+  async function revocar(jti, usuario, exp) {
+    await pool.query(
+      'INSERT IGNORE INTO tokens_revocados (jti, usuario, expira) VALUES (?, ?, FROM_UNIXTIME(?))',
+      [jti, usuario, exp],
+    );
+  }
 
-function crearModeloTokens(pool){
-    //vamos anotar un token como revocado (cuando el usuario hace logout)
-    //el exp del jwt viene en segundos, por eso usamos FROM_UNIXTIME
-    async function revocar(jti, usuario, exp) {
-        await pool.query(
-            'INSERT IGNORE INTO tokens_revocados (jti, usuario, expira) VALUES (?, ?, FROM_UNIXTIME(?))', [jti, usuario, exp]
-        );
-    }
+  // ¿Este jti está en la lista negra?
+  // CORREGIDO: la tabla decía tokens_recovados y el arreglo de parámetros estaba FUERA de pool.query(...).
+  async function estaRevocado(jti) {
+    const [filas] = await pool.query('SELECT 1 FROM tokens_revocados WHERE jti = ? LIMIT 1', [String(jti || '')]);
+    return filas.length > 0;
+  }
 
-    //pregunto este jwt esta en la lista?
-    async function estaRevocado(jti) {
-        const [filas] = await pool.query('SELECT 1 FROM tokens_revocados WHERE jti = ?', [String(jti || '')]);
-        return filas.length > 0;
-    }
+  // Consulta la lista negra, del más reciente al más viejo.
+  async function listar() {
+    const [filas] = await pool.query(
+      'SELECT jti, usuario, expira, revocado_en FROM tokens_revocados ORDER BY revocado_en DESC, jti',
+    );
+    return filas;
+  }
 
-    //consultamos la lista de la tabla
-    async function listar() {
-        const [filas] = await pool.query(
-            'SELECT jti, usuario, expira, revocado_en FROM tokens_revocados ORDER BY revocado_en DESC, jti');
-        return filas;
-    }
-
-    return {revocar, estaRevocado, listar};
+  return { revocar, estaRevocado, listar };
 }
 
-module.exports = {crearModeloTokens};
+module.exports = { crearModeloTokens };

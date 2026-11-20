@@ -1,15 +1,15 @@
 // La página solo hace fetch a la API. El navegador manda la cookie solo (misma página, mismo servidor).
-//el script esta al final del body, entonces ya existen todos los elementos cuando corre
+// El script está al final del body, entonces ya existen todos los elementos cuando corre.
 const $ = (id) => document.getElementById(id);
- 
-//Etapa 1: funcion para llamar a la api, la usamos en todas las peticiones
-//fetch no marca error con 401 o 403, el codigo lo sacamos de respuesta.status
-//no necesitamos credentials: 'include' porque la pagina y la api estan en el mismo servidor
-//jwt: si le pasamos un token lo mandamos en el encabezado Authorization
+
+// Etapa 1: función para llamar a la API, la usamos en todas las peticiones.
+// fetch no marca error con 401 o 403, el código lo sacamos de respuesta.status.
+// No necesitamos credentials: 'include' porque la página y la API están en el mismo servidor.
+// JWT: si le pasamos un token lo mandamos en el encabezado Authorization.
 async function llamar(metodo, url, cuerpo, token) {
   const opciones = { method: metodo, headers: {} };
   if (token) opciones.headers.Authorization = `Bearer ${token}`;
-  //si hay cuerpo mandamos el content-type para que express.json() lo pueda leer
+  // Si hay cuerpo mandamos el Content-Type para que express.json() lo pueda leer.
   if (cuerpo !== undefined) {
     opciones.headers['Content-Type'] = 'application/json';
     opciones.body = JSON.stringify(cuerpo);
@@ -18,52 +18,54 @@ async function llamar(metodo, url, cuerpo, token) {
   try {
     respuesta = await fetch(url, opciones);
   } catch {
-    //validacion: si el servidor esta apagado regresamos codigo 0 para que no truene la pagina
+    // Validación: si el servidor está apagado regresamos código 0 para que no truene la página.
     return { status: 0, datos: { error: 'No hay conexión con el servidor (¿está corriendo npm start?)' } };
   }
   let datos = null;
   try {
     datos = await respuesta.json();
   } catch {
-    datos = null; //si no viene json lo dejamos en null
+    datos = null; // Si no viene JSON lo dejamos en null.
   }
   return { status: respuesta.status, datos };
 }
- 
-//Etapa 2: la bitacora
-//elegimos el color segun el codigo de respuesta
+
+// Etapa 2: la bitácora.
+// Elegimos el color según el código de respuesta.
 function claseDelCodigo(status) {
   if (status >= 200 && status < 300) return 'codigo ok';
   if (status === 401) return 'codigo e401';
   if (status === 403) return 'codigo e403';
   return 'codigo error';
 }
- 
-//agregamos cada respuesta arriba con prepend
-//usamos textContent y no innerHTML para evitar XSS (que metan un script)
-//jwt: idLista sirve para escribir en la bitacora de la seccion 6
+
+// Agregamos cada respuesta arriba con prepend.
+// Usamos textContent y no innerHTML para evitar XSS (que metan un script).
+// JWT: idLista sirve para escribir en la bitácora de la sección 6.
 function anotar(metodo, url, status, datos, idLista = 'bitacora') {
+  const lista = $(idLista);
+  if (!lista) return;
+
   const li = document.createElement('li');
- 
+
   const codigo = document.createElement('span');
   codigo.className = claseDelCodigo(status);
   codigo.textContent = status;
- 
+
   const ruta = document.createElement('span');
   ruta.textContent = ` ${metodo} ${url}`;
- 
+
   const pre = document.createElement('pre');
   pre.textContent = JSON.stringify(datos, null, 2);
- 
+
   li.append(codigo, ruta, pre);
-  $(idLista).prepend(li);
- 
-  //validacion: solo dejamos las ultimas 30 para que la pagina no se haga lenta
-  const lista = $(idLista);
+  lista.prepend(li);
+
+  // Validación: solo dejamos las últimas 30 para que la página no se haga lenta.
   while (lista.children.length > 30) lista.lastElementChild.remove();
 }
- 
-//validacion: revisamos el formulario antes de mandarlo al servidor
+
+// Validación: revisamos el formulario antes de mandarlo al servidor.
 function validarFormulario(usuario, contrasena) {
   if (usuario.trim() === '') return 'Escribe un usuario';
   if (contrasena === '') return 'Escribe la contraseña';
@@ -71,58 +73,66 @@ function validarFormulario(usuario, contrasena) {
   if (contrasena.length > 100) return 'La contraseña es demasiado larga';
   return null;
 }
- 
-//validacion: desactivamos los botones mientras responde el servidor para que no le piquen muchas veces
+
+// Validación: desactivamos los botones mientras responde el servidor para que no le piquen muchas veces.
 function bloquearBotones(bloquear) {
   document.querySelectorAll('button').forEach((b) => { b.disabled = bloquear; });
 }
- 
-//Etapa 3: el estado, le preguntamos al servidor si tenemos sesion
+
+// Etapa 3: el estado, le preguntamos al servidor si tenemos sesión.
 async function pintarEstado() {
   const { status, datos } = await llamar('GET', '/api/sesion');
   const estado = $('estado');
-  if (status === 200 && datos && datos.usuario) {
-    const u = datos.usuario;
-    estado.textContent = `Con sesión: ${u.nombre} (${u.rol}) · sesión ${datos.sesion} · vence en ${datos.expiraEnSegundos} s`;
-    estado.className = 'estado con-sesion';
-  } else {
-    estado.textContent = `Sin sesión (el servidor responde ${status})`;
-    estado.className = 'estado sin-sesion';
+  if (estado) {
+    if (status === 200 && datos && datos.usuario) {
+      const u = datos.usuario;
+      estado.textContent = `Con sesión: ${u.nombre} (${u.rol}) · sesión ${datos.sesion} · vence en ${datos.expiraEnSegundos} s`;
+      estado.className = 'estado con-sesion';
+    } else {
+      estado.textContent = `Sin sesión (el servidor responde ${status})`;
+      estado.className = 'estado sin-sesion';
+    }
   }
-  //con httpOnly en true sale vacio porque javascript no puede leer la cookie
-  $('cookie-js').textContent = document.cookie || '(vacío)';
+  // Con httpOnly en true sale vacío porque JavaScript no puede leer la cookie.
+  const cookieJs = $('cookie-js');
+  if (cookieJs) cookieJs.textContent = document.cookie || '(vacío)';
 }
- 
-//Etapa 4: la tabla de sesiones que guarda el servidor
-//primero vaciamos el tbody para que no se dupliquen las filas
+
+// Etapa 4: la tabla de sesiones que guarda el servidor.
+// Primero vaciamos el tbody para que no se dupliquen las filas.
 async function pintarTabla() {
   const { status, datos } = await llamar('GET', '/api/diagnostico/sesiones');
   const tbody = $('tabla-sesiones');
+  if (!tbody) return;
   tbody.replaceChildren();
- 
+
+  const donde = $('donde');
   if (status !== 200 || !datos) {
-    $('donde').textContent = `No se pudo leer el diagnóstico (código ${status})`;
+    if (donde) donde.textContent = `No se pudo leer el diagnóstico (código ${status})`;
     agregarFilaVacia(tbody, '(no se pudo leer)');
     return;
   }
- 
-  $('donde').textContent = datos.almacen === 'memoria'
-    ? 'En la MEMORIA del servidor (MemoryStore): se pierden al reiniciar'
-    : 'En MySQL, tabla sessions (sobreviven a un reinicio)';
- 
-  if (!datos.sesiones || datos.sesiones.length === 0) {
+
+  if (donde) {
+    donde.textContent = datos.almacen === 'memoria'
+      ? 'En la MEMORIA del servidor (MemoryStore): se pierden al reiniciar'
+      : 'En MySQL, tabla sessions (sobreviven a un reinicio)';
+  }
+
+  const sesiones = Array.isArray(datos.sesiones) ? datos.sesiones : [];
+  if (sesiones.length === 0) {
     agregarFilaVacia(tbody, '(sin sesiones)');
     return;
   }
- 
-  for (const s of datos.sesiones) {
+
+  for (const s of sesiones) {
     const tr = document.createElement('tr');
     if (s.esLaTuya) tr.className = 'tuya';
-    const vence = s.expira ? new Date(s.expira).toLocaleTimeString() : '—'; //fecha a hora local
+    const vence = s.expira ? new Date(s.expira).toLocaleTimeString() : '—';
     const celdas = [
       s.esLaTuya ? `${s.sesion} (la tuya)` : s.sesion,
-      s.usuario,
-      String(s.visitas),
+      s.usuario ?? '—',
+      String(s.visitas ?? 0),
       vence,
     ];
     for (const texto of celdas) {
@@ -133,8 +143,8 @@ async function pintarTabla() {
     tbody.append(tr);
   }
 }
- 
-//fila de cuando no hay sesiones
+
+// Fila de cuando no hay sesiones.
 function agregarFilaVacia(tbody, texto) {
   const tr = document.createElement('tr');
   const td = document.createElement('td');
@@ -143,21 +153,25 @@ function agregarFilaVacia(tbody, texto) {
   tr.append(td);
   tbody.append(tr);
 }
- 
-//refresca el estado y la tabla juntos
+
+// Refresca el estado y la tabla juntos.
 async function refrescarTodo() {
   await pintarEstado();
   await pintarTabla();
 }
- 
-//Etapa 5: los eventos
-//formulario de login, preventDefault para que no se recargue la pagina
-$('form-login').addEventListener('submit', async (evento) => {
+
+// Etapa 5: los eventos.
+// Formulario de login, preventDefault para que no se recargue la página.
+$('form-login')?.addEventListener('submit', async (evento) => {
   evento.preventDefault();
-  const cuerpo = { usuario: $('usuario').value, contrasena: $('contrasena').value };
+  const usuarioEl = $('usuario');
+  const contrasenaEl = $('contrasena');
+  const cuerpo = {
+    usuario: usuarioEl ? usuarioEl.value : '',
+    contrasena: contrasenaEl ? contrasenaEl.value : '',
+  };
   const problema = validarFormulario(cuerpo.usuario, cuerpo.contrasena);
   if (problema) {
-    //no se manda al servidor, solo lo anotamos con --
     anotar('POST', '/api/login', '--', { error: `La página no lo mandó: ${problema}` });
     return;
   }
@@ -167,36 +181,40 @@ $('form-login').addEventListener('submit', async (evento) => {
     anotar('POST', '/api/login', status, datos);
     await refrescarTodo();
   } finally {
-    bloquearBotones(false); //se vuelven a activar aunque falle algo
+    bloquearBotones(false);
   }
 });
- 
-//cuando cambia el usuario ponemos su contraseña de ejemplo
-$('usuario').addEventListener('change', () => {
-  $('contrasena').value = `${$('usuario').value}12345`;
+
+// Cuando cambia el usuario ponemos su contraseña de ejemplo.
+$('usuario')?.addEventListener('change', () => {
+  const usuarioEl = $('usuario');
+  const contrasenaEl = $('contrasena');
+  if (usuarioEl && contrasenaEl) {
+    contrasenaEl.value = `${usuarioEl.value}12345`;
+  }
 });
- 
-//recorremos todos los botones que tienen data-url, el metodo y la url los sacamos con dataset
+
+// Recorremos todos los botones que tienen data-url; el método y la url los sacamos con dataset.
 document.querySelectorAll('button[data-url]').forEach((boton) => {
   boton.addEventListener('click', async () => {
     const { metodo, url } = boton.dataset;
     bloquearBotones(true);
     try {
-      const { status, datos } = await llamar(metodo, url);
-      anotar(metodo, url, status, datos);
+      const { status, datos } = await llamar(metodo || 'GET', url);
+      anotar(metodo || 'GET', url, status, datos);
       await refrescarTodo();
     } finally {
       bloquearBotones(false);
     }
   });
 });
- 
-$('btn-refrescar').addEventListener('click', refrescarTodo);
-$('btn-sesiones').addEventListener('click', pintarTabla);
- 
+
+$('btn-refrescar')?.addEventListener('click', refrescarTodo);
+$('btn-sesiones')?.addEventListener('click', pintarTabla);
+
 // ===================== JWT (semana 13) =====================
-//el token lo guardamos en sessionStorage (se borra al cerrar la pestaña)
-//con jwt el navegador NO lo manda solo como la cookie, nosotros lo ponemos en cada peticion
+// El token lo guardamos en sessionStorage (se borra al cerrar la pestaña).
+// Con JWT el navegador NO lo manda solo como la cookie; nosotros lo ponemos en cada petición.
 let tokenJWT = sessionStorage.getItem('tokenJWT');
 
 function guardarToken(token) {
@@ -205,68 +223,95 @@ function guardarToken(token) {
   else sessionStorage.removeItem('tokenJWT');
 }
 
-//el payload es la parte de en medio del token, viene en base64url y se puede leer sin el secreto
+// El payload es la parte de en medio del token, viene en base64url y se puede leer sin el secreto.
 function leerPayload(token) {
   try {
     const parte = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
     const bytes = Uint8Array.from(atob(parte), (c) => c.charCodeAt(0));
-    return JSON.parse(new TextDecoder().decode(bytes)); //TextDecoder para que salgan bien los acentos
+    return JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     return null;
   }
 }
 
-//le preguntamos al servidor si el token sirve y mostramos sus datos
+// Le preguntamos al servidor si el token sirve y mostramos sus datos.
 async function pintarEstadoJWT() {
   const estado = $('estado-jwt');
+  const jwtTokenEl = $('jwt-token');
+  const jwtPayloadEl = $('jwt-payload');
+  if (!estado) return;
+
   if (!tokenJWT) {
     estado.textContent = 'Sin token';
     estado.className = 'estado sin-sesion';
-    $('jwt-token').textContent = '(sin token)';
-    $('jwt-payload').textContent = '(sin token)';
+    if (jwtTokenEl) jwtTokenEl.textContent = '(sin token)';
+    if (jwtPayloadEl) jwtPayloadEl.textContent = '(sin token)';
     return;
   }
-  $('jwt-token').textContent = tokenJWT;
-  $('jwt-payload').textContent = JSON.stringify(leerPayload(tokenJWT), null, 2);
+
+  if (jwtTokenEl) jwtTokenEl.textContent = tokenJWT;
+  if (jwtPayloadEl) jwtPayloadEl.textContent = JSON.stringify(leerPayload(tokenJWT), null, 2);
 
   const { status, datos } = await llamar('GET', '/api/jwt/sesion', undefined, tokenJWT);
   if (status === 200 && datos && datos.usuario) {
     const u = datos.usuario;
-    estado.textContent = `Con token: ${u.nombre} (${u.rol}) · token ${datos.jti.slice(0, 8)}… · vence en ${datos.expiraEnSegundos} s`;
+    estado.textContent = `Con token: ${u.nombre} (${u.rol}) · token ${datos.sesion || idCortoLocal(datos.jti)} · vence en ${datos.expiraEnSegundos} s`;
     estado.className = 'estado con-sesion';
   } else {
-    //el token ya no sirve (vencido, revocado o alterado)
-    estado.textContent = `Token NO válido: ${datos ? datos.error : status}`;
+    estado.textContent = `Token NO válido: ${datos && datos.error ? datos.error : status}`;
     estado.className = 'estado sin-sesion';
   }
 }
 
-//tabla de la lista negra
+function idCortoLocal(id) {
+  return id ? `${String(id).slice(0, 8)}…` : '—';
+}
+
+// Tabla de la lista negra (alineada con { revocacion, revocados: [{ jti, usuario, expira, revocadoEn }] }).
 async function pintarTablaTokens() {
   const { status, datos } = await llamar('GET', '/api/diagnostico/tokens');
   const tbody = $('tabla-tokens');
+  if (!tbody) return;
   tbody.replaceChildren();
+
+  const revocarEl = $('jwt-revocar');
   if (status !== 200 || !datos) {
-    $('jwt-revocar').textContent = `No se pudo leer la lista negra (código ${status})`;
+    if (revocarEl) revocarEl.textContent = `No se pudo leer la lista negra (código ${status})`;
     agregarFilaVacia(tbody, '(no se pudo leer)');
     return;
   }
-  $('jwt-revocar').textContent = datos.revocar
-    ? 'jwtRevocar = true: al hacer logout el token se anota en MySQL (tabla tokens_revocados)'
-    : 'jwtRevocar = false: el servidor no guarda nada, el token sirve hasta que venza';
 
-  if (datos.tokens.length === 0) {
+  const revocacionActiva = Boolean(datos.revocacion ?? datos.revocar);
+  if (revocarEl) {
+    revocarEl.textContent = revocacionActiva
+      ? 'jwtRevocar = true: al hacer logout el token se anota en MySQL (tabla tokens_revocados)'
+      : 'jwtRevocar = false: el servidor no guarda nada, el token sirve hasta que venza';
+  }
+
+  const listaTokens = Array.isArray(datos.revocados)
+    ? datos.revocados
+    : Array.isArray(datos.tokens)
+      ? datos.tokens
+      : [];
+
+  if (listaTokens.length === 0) {
     agregarFilaVacia(tbody, '(sin tokens revocados)');
     return;
   }
-  for (const t of datos.tokens) {
+
+  const payloadActual = tokenJWT ? leerPayload(tokenJWT) : null;
+  for (const t of listaTokens) {
     const tr = document.createElement('tr');
-    if (tokenJWT && leerPayload(tokenJWT)?.jti === t.jti) tr.className = 'tuya'; //marcamos el nuestro
+    const jtiMostrado = t.jti || '—';
+    if (payloadActual?.jti && jtiMostrado.startsWith(String(payloadActual.jti).slice(0, 8))) {
+      tr.className = 'tuya';
+    }
+    const revocadoFecha = t.revocadoEn || t.revocado_en;
     const celdas = [
-      `${t.jti.slice(0, 8)}…`,
-      t.usuario,
-      new Date(t.expira).toLocaleTimeString(),
-      new Date(t.revocado_en).toLocaleTimeString(),
+      jtiMostrado.endsWith('…') ? jtiMostrado : `${jtiMostrado.slice(0, 8)}…`,
+      t.usuario ?? '—',
+      t.expira ? new Date(t.expira).toLocaleTimeString() : '—',
+      revocadoFecha ? new Date(revocadoFecha).toLocaleTimeString() : '—',
     ];
     for (const texto of celdas) {
       const td = document.createElement('td');
@@ -282,12 +327,11 @@ async function refrescarJWT() {
   await pintarTablaTokens();
 }
 
-//botones de la seccion 6
+// Botones de la sección 6.
 document.querySelectorAll('button[data-jwt]').forEach((boton) => {
   boton.addEventListener('click', async () => {
     const accion = boton.dataset.jwt;
 
-    //este solo borra el token del navegador, no le avisa al servidor
     if (accion === 'borrar') {
       guardarToken(null);
       anotar('--', 'sessionStorage', '--', { mensaje: 'Token borrado del navegador (el servidor no se entera)' }, 'bitacora-jwt');
@@ -298,17 +342,18 @@ document.querySelectorAll('button[data-jwt]').forEach((boton) => {
     bloquearBotones(true);
     try {
       if (accion === 'login') {
-        //usamos el usuario y contraseña de la seccion 2
-        const cuerpo = { usuario: $('usuario').value, contrasena: $('contrasena').value };
+        const cuerpo = {
+          usuario: $('usuario') ? $('usuario').value : '',
+          contrasena: $('contrasena') ? $('contrasena').value : '',
+        };
         const { status, datos } = await llamar('POST', '/api/jwt/login', cuerpo);
         anotar('POST', '/api/jwt/login', status, datos, 'bitacora-jwt');
-        if (status === 200) guardarToken(datos.token);
+        if (status === 200 && datos && datos.token) guardarToken(datos.token);
       } else {
         const [metodo, url] = accion.split(' ');
         const { status, datos } = await llamar(metodo, url, undefined, tokenJWT);
         anotar(metodo, url, status, datos, 'bitacora-jwt');
-        //refresh nos da un token nuevo, lo cambiamos por el viejo
-        if (url === '/api/jwt/refresh' && status === 200) guardarToken(datos.token);
+        if (url === '/api/jwt/refresh' && status === 200 && datos && datos.token) guardarToken(datos.token);
       }
       await refrescarJWT();
     } finally {
@@ -317,16 +362,19 @@ document.querySelectorAll('button[data-jwt]').forEach((boton) => {
   });
 });
 
-$('btn-tokens').addEventListener('click', pintarTablaTokens);
+$('btn-tokens')?.addEventListener('click', pintarTablaTokens);
 
-//Etapa 6: al cargar la pagina mostramos la configuracion y refrescamos todo
+// Etapa 6: al cargar la página mostramos la configuración y refrescamos todo.
 async function iniciar() {
-  //validacion: maximo 100 caracteres en la contraseña
-  $('contrasena').maxLength = 100;
-  const { datos } = await llamar('GET', '/api/config');
-  $('config').textContent = JSON.stringify(datos, null, 2);
+  const contrasenaEl = $('contrasena');
+  if (contrasenaEl) contrasenaEl.maxLength = 100;
+  const { status, datos } = await llamar('GET', '/api/config');
+  const configEl = $('config');
+  if (configEl && status === 200 && datos) {
+    configEl.textContent = JSON.stringify(datos, null, 2);
+  }
   await refrescarTodo();
-  await refrescarJWT(); //jwt: tambien pintamos la seccion 6
+  await refrescarJWT();
 }
- 
+
 iniciar();
